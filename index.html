@@ -72,20 +72,40 @@ footer b{color:var(--black);font-weight:600}
 }
 
 /* スマホ：操作の幅を画面いっぱいに近づける */
+/* スマホ：写真と操作を1画面に収める（下にスクロールしなくていい） */
 @media (max-width:600px){
-  .top{padding:12px 16px}
-  .top .info{font-size:10px}
-  .wrap{padding:18px 16px 0;gap:20px}
-  footer{padding:20px 16px;margin-top:40px}
-  .set{margin-top:22px}
-  .meas{gap:2px 18px;margin-top:12px}
-  .opt{padding:13px 14px;font-size:14px}
-  input[type=range]{height:44px}
+  .top{padding:9px 14px}
+  .top .wm{font-size:14px}
+  .top .info{font-size:9.5px}
+
+  .wrap{
+    display:flex;flex-direction:column;align-items:stretch;gap:0;
+    padding:8px 14px 10px;
+    height:calc(100vh - 47px);height:calc(100dvh - 47px);
+  }
+  .wrap > section{flex:1 1 auto;min-height:120px;display:flex;flex-direction:column}
+  .wrap > aside{flex:0 0 auto}
+
+  .tile{flex:1 1 auto;width:100%;min-height:90px;display:flex;align-items:center;justify-content:center}
+  .tile svg{width:auto;height:100%;max-width:100%;min-width:0;min-height:0}
+  .tag{top:8px;left:8px;font-size:9px}
+
+  .meas{gap:2px 14px;margin-top:8px;font-size:10px}
+
+  .eyebrow,h1,.lede,.hint{display:none}
+  .set{margin-top:9px;padding-top:7px}
+  .set h2{margin-bottom:7px}
+  .set .ends{display:none}
+  .opt{padding:11px 13px;font-size:13px;min-width:48px}
+  .opts{gap:6px}
+
+  input[type=range]{height:36px}
   input[type=range]::-webkit-slider-runnable-track{height:2px}
   input[type=range]::-moz-range-track{height:2px}
   input[type=range]::-webkit-slider-thumb{width:26px;height:26px;margin-top:-13px}
   input[type=range]::-moz-range-thumb{width:26px;height:26px}
-  .ends{margin-top:2px}
+
+  footer{padding:18px 14px;margin-top:0}
 }
 </style>
 </head>
@@ -125,6 +145,12 @@ footer b{color:var(--black);font-weight:600}
       <h2>大きさ<span id="wval"></span></h2>
       <input type="range" id="size" min="5" max="48" step="0.5" value="16" aria-label="ロゴの幅">
       <div class="ends"><span>5cm</span><span id="maxlab"></span></div>
+    </div>
+
+    <div class="set">
+      <h2>向き<span id="rval"></span></h2>
+      <input type="range" id="rot" min="-180" max="180" step="1" value="0" aria-label="ロゴの向き">
+      <div class="ends"><span>左へ180&deg;</span><span>右へ180&deg;</span></div>
     </div>
 
     <div class="set">
@@ -198,10 +224,17 @@ const $ = s => document.querySelector(s);
 const clamp = (v,a,b) => Math.max(a, Math.min(b,v));
 const it = () => ITEMS[state.item];
 const upc = () => it().bodyPx / it().widthCm;
-const maxCm = () => { const a = it().area, u = upc();
-  return Math.min(a.w/u, (a.h/u)/(LOGO.h/LOGO.w)); };
+const ratio = LOGO.h / LOGO.w;
+const box = () => {                       // 傾けたときの外枠の比率
+  const r = state.rot * Math.PI / 180;
+  return { c: Math.abs(Math.cos(r)), s: Math.abs(Math.sin(r)) };
+};
+const maxCm = () => {
+  const a = it().area, u = upc(), b = box();
+  return Math.min(a.w / (b.c + b.s * ratio), a.h / (b.s + b.c * ratio)) / u;
+};
 
-const state = { item:'tee', wCm:16, cx:500, cy:300 };
+const state = { item:'tee', wCm:16, rot:0, cx:500, cy:300 };
 
 function render(){
   const s = it(), u = upc(), a = s.area, mx = maxCm();
@@ -210,24 +243,29 @@ function render(){
   $('#photo').setAttribute('href', s.photo);
 
   state.wCm = clamp(state.wCm, 5, mx);
-  const w = state.wCm * u, h = w * LOGO.h / LOGO.w;
-  state.cx = clamp(state.cx, a.x + w/2, a.x + a.w - w/2);
-  state.cy = clamp(state.cy, a.y + h/2, a.y + a.h - h/2);
+  const w = state.wCm * u, h = w * ratio;
+  const b = box();
+  const bw = b.c * w + b.s * h, bh = b.s * w + b.c * h;   // 傾けたときの外枠
+  state.cx = bw >= a.w ? a.x + a.w/2 : clamp(state.cx, a.x + bw/2, a.x + a.w - bw/2);
+  state.cy = bh >= a.h ? a.y + a.h/2 : clamp(state.cy, a.y + bh/2, a.y + a.h - bh/2);
   $('#logo').setAttribute('transform',
-    'translate('+(state.cx-w/2).toFixed(2)+','+(state.cy-h/2).toFixed(2)+') scale('+(w/LOGO.w).toFixed(5)+')');
+    'translate('+state.cx.toFixed(2)+','+state.cy.toFixed(2)+') rotate('+state.rot+') scale('+(w/LOGO.w).toFixed(5)+') translate('+(-LOGO.w/2)+','+(-LOGO.h/2)+')');
 
-  const hCm = state.wCm * LOGO.h / LOGO.w;
-  const top = ((state.cy - h/2) - s.ref.y) / u;
+  const hCm = state.wCm * ratio;
+  const top = ((state.cy - bh/2) - s.ref.y) / u;
   const off = (state.cx - s.centerX) / u;
   const dir = Math.abs(off) < 0.15 ? 'まん中' : (off>0 ? '右へ '+off.toFixed(1)+'cm' : '左へ '+Math.abs(off).toFixed(1)+'cm');
   $('#meas').innerHTML =
     '<span>大きさ <b>'+state.wCm.toFixed(1)+' × '+hCm.toFixed(1)+'cm</b></span>'+
     '<span>'+s.ref.label+' <b>'+top.toFixed(1)+'cm</b></span>'+
-    '<span>中心から <b>'+dir+'</b></span>';
+    '<span>中心から <b>'+dir+'</b></span>'+
+    (state.rot ? '<span>傾き <b>'+(state.rot>0?'右':'左')+' '+Math.abs(state.rot)+'&deg;</b></span>' : '');
 
   const sz = $('#size');
   sz.max = mx.toFixed(1); sz.value = state.wCm;
   $('#wval').textContent = state.wCm.toFixed(1)+'cm';
+  $('#rot').value = state.rot;
+  $('#rval').textContent = state.rot === 0 ? 'まっすぐ' : (state.rot>0?'右':'左')+' '+Math.abs(state.rot)+'\u00B0';
   $('#maxlab').textContent = mx.toFixed(0)+'cm（全面）';
 
   const items = $('#items'); items.innerHTML = '';
@@ -253,8 +291,12 @@ function render(){
 /* 動かす */
 const svg = $('#svg'), logo = $('#logo');
 let drag = null;
-const toPx = e => { const r = svg.getBoundingClientRect();
-  return { x:(e.clientX-r.left)/r.width*VB.w, y:(e.clientY-r.top)/r.height*VB.h }; };
+const toPx = e => {                      // 写真の周りに余白ができても位置がずれないようにする
+  const r = svg.getBoundingClientRect();
+  const k = Math.min(r.width/VB.w, r.height/VB.h);
+  const ox = (r.width - VB.w*k)/2, oy = (r.height - VB.h*k)/2;
+  return { x:(e.clientX - r.left - ox)/k, y:(e.clientY - r.top - oy)/k };
+};
 logo.addEventListener('pointerdown', e => {
   const p = toPx(e); drag = { dx:state.cx-p.x, dy:state.cy-p.y };
   logo.setPointerCapture(e.pointerId); e.preventDefault();
@@ -271,6 +313,13 @@ logo.addEventListener('keydown', e => {
   if(!m) return; state.cx += m[0]; state.cy += m[1]; render(); e.preventDefault();
 });
 $('#size').addEventListener('input', e => { state.wCm = parseFloat(e.target.value); render(); });
+$('#rot').addEventListener('input', e => {
+  let v = parseInt(e.target.value, 10);
+  if (Math.abs(v) <= 3) v = 0;                                  // 0の近くはまっすぐで止まる
+  if (Math.abs(Math.abs(v) - 45) <= 3) v = v > 0 ? 45 : -45;
+  if (Math.abs(Math.abs(v) - 90) <= 3) v = v > 0 ? 90 : -90;
+  state.rot = v; render();
+});
 
 render();
 </script>
